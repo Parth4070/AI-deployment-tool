@@ -5,6 +5,7 @@ Adding a field here is a security decision: keep it to names and short labels.
 """
 
 import re
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import AfterValidator, Field, StringConstraints
@@ -44,3 +45,31 @@ class ProjectInfo(StrictModel):
     env_var_names: tuple[EnvVarName, ...] = ()
     migration_tool: Label | None = None
     detected_files: tuple[RelativePath, ...] = ()
+
+
+class ScanWarningCode(StrEnum):
+    UNREADABLE_FILE = "unreadable_file"
+    FILE_TOO_LARGE = "file_too_large"
+    SYMLINK_SKIPPED = "symlink_skipped"
+    UNUSUAL_PATH = "unusual_path"
+    LIMIT_REACHED = "limit_reached"
+    INVALID_MANIFEST = "invalid_manifest"
+    MISSING_MANIFEST = "missing_manifest"
+    INVALID_RUNTIME_VERSION = "invalid_runtime_version"
+    RUNTIME_CONFLICT = "runtime_conflict"
+    NO_PROJECT_FOUND = "no_project_found"
+    NESTED_PROJECTS = "nested_projects"
+    MIXED_LANGUAGES = "mixed_languages"
+    SUSPICIOUS_ENV_NAME = "suspicious_env_name"
+
+
+class ScanWarning(StrictModel):
+    """A problem found while scanning. A fixed code and a path, so file text cannot get in."""
+
+    code: ScanWarningCode
+    path: RelativePath | None = None
+
+
+class ScanResult(StrictModel):
+    project: ProjectInfo
+    warnings: tuple[ScanWarning, ...] = ()

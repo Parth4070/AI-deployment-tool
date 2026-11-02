@@ -5,7 +5,7 @@ from deploy_agent.models.common import Confidence, SafetyTier, Severity
 from deploy_agent.models.diagnosis import Diagnosis
 from deploy_agent.models.plan import DeploymentPlan
 from deploy_agent.models.preflight import PreflightResult
-from deploy_agent.models.project import ProjectInfo
+from deploy_agent.models.project import ProjectInfo, ScanResult, ScanWarning, ScanWarningCode
 
 __all__ = [
     "Action",
@@ -15,5 +15,8 @@ __all__ = [
     "PreflightResult",
     "ProjectInfo",
     "SafetyTier",
+    "ScanResult",
+    "ScanWarning",
+    "ScanWarningCode",
     "Severity",
 ]

@@ -16,6 +16,9 @@ from deploy_agent.models import (
     PreflightResult,
     ProjectInfo,
     SafetyTier,
+    ScanResult,
+    ScanWarning,
+    ScanWarningCode,
     Severity,
 )
 
@@ -381,3 +384,19 @@ class TestDiagnosis:
         assert diagnosis.confidence is Confidence.HIGH
         assert diagnosis.alternative_causes == ("Wrong virtual environment",)
         assert diagnosis.next_step_tier is SafetyTier.NEEDS_APPROVAL
+
+
+class TestScanResult:
+    def test_warning_holds_only_a_code_and_a_path(self) -> None:
+        assert set(ScanWarning.model_fields) == {"code", "path"}
+
+    def test_result_holds_only_a_project_and_warnings(self) -> None:
+        assert set(ScanResult.model_fields) == {"project", "warnings"}
+
+    def test_warning_path_must_stay_inside_the_project(self) -> None:
+        with pytest.raises(ValidationError):
+            ScanWarning(code=ScanWarningCode.UNREADABLE_FILE, path="../outside.py")
+
+    def test_warning_cannot_hold_free_text_in_its_code(self) -> None:
+        with pytest.raises(ValidationError):
+            ScanWarning(code=FAKE_SECRET)  # type: ignore[arg-type]

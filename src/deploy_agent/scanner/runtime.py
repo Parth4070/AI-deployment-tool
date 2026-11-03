@@ -18,6 +18,8 @@ _LEADING_NUMBERS = re.compile(r"\d+(?:\.\d+)*")
 class Runtime:
     version: str | None = None
     warnings: tuple[ScanWarning, ...] = ()
+    sources: tuple[tuple[str, str], ...] = ()
+    """Every valid (file, version) found, most trusted first. Preflight compares them."""
 
 
 def normalise_version(raw: str) -> str | None:
@@ -88,7 +90,7 @@ def _pins_disagree(versions: list[str]) -> bool:
 def detect_runtime(
     language: str, snapshot: ProjectSnapshot, manifests: Manifests, docker: DockerfileInfo
 ) -> Runtime:
-    versions: list[str] = []
+    sources: list[tuple[str, str]] = []
     warnings: list[ScanWarning] = []
     for path, raw in _candidates(language, snapshot, manifests, docker):
         if raw is None:
@@ -97,8 +99,13 @@ def detect_runtime(
         if version is None:
             warnings.append(make_warning(ScanWarningCode.INVALID_RUNTIME_VERSION, path))
         else:
-            versions.append(version)
+            sources.append((path, version))
 
+    versions = [version for _, version in sources]
     if _pins_disagree(versions):
         warnings.append(make_warning(ScanWarningCode.RUNTIME_CONFLICT))
-    return Runtime(version=versions[0] if versions else None, warnings=tuple(warnings))
+    return Runtime(
+        version=versions[0] if versions else None,
+        warnings=tuple(warnings),
+        sources=tuple(sources),
+    )

@@ -68,6 +68,10 @@ CONFIG_FILE_NAMES = frozenset(
 
 PYTHON_SUFFIXES = frozenset({".py"})
 JAVASCRIPT_SUFFIXES = frozenset({".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"})
+SQL_SUFFIXES = frozenset({".sql"})
+
+# SQL files are only read inside these folders, where migration tools keep them.
+MIGRATION_FOLDERS = frozenset({"drizzle", "migrations"})
 
 _path_check: TypeAdapter[str] = TypeAdapter(RelativePath)
 
@@ -105,7 +109,14 @@ def _should_read(path: str) -> bool:
     is_root_file = "/" not in path
     if is_root_file and (path in CONFIG_FILE_NAMES or path.lower() in ENV_TEMPLATE_NAMES):
         return True
-    return Path(path).suffix.lower() in PYTHON_SUFFIXES | JAVASCRIPT_SUFFIXES
+    suffix = Path(path).suffix.lower()
+    if suffix in SQL_SUFFIXES:
+        return in_migration_folder(path)
+    return suffix in PYTHON_SUFFIXES | JAVASCRIPT_SUFFIXES
+
+
+def in_migration_folder(path: str) -> bool:
+    return not MIGRATION_FOLDERS.isdisjoint(path.split("/")[:-1])
 
 
 def _list_files(root: Path, warnings: list[ScanWarning]) -> dict[str, int]:

@@ -1,6 +1,7 @@
 """Runs every detector and builds the final result. No AI, and no project code is run."""
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from deploy_agent.models.project import ProjectInfo, ScanResult, ScanWarning
@@ -25,7 +26,7 @@ from deploy_agent.scanner.ports import (
     ports_from_javascript,
     ports_from_python,
 )
-from deploy_agent.scanner.runtime import detect_runtime
+from deploy_agent.scanner.runtime import Runtime, detect_runtime
 from deploy_agent.scanner.source import parse_javascript, parse_python
 from deploy_agent.scanner.stack import UNKNOWN, detect_stack
 
@@ -73,18 +74,41 @@ def _merge_warnings(*groups: Iterable[ScanWarning]) -> tuple[ScanWarning, ...]:
     return tuple(sorted(merged, key=lambda warning: (warning.code, warning.path or "")))
 
 
+@dataclass(frozen=True)
+class ScanDetails:
+    """The scan result plus the in-memory facts behind it.
+
+    Only for local use by preflight. Never send this to the model: ``snapshot`` holds raw
+    file text. ``result`` is the narrow, safe summary.
+    """
+
+    result: ScanResult
+    snapshot: ProjectSnapshot
+    manifests: Manifests
+    docker: DockerfileInfo
+    runtime: Runtime
+
+
 def scan_project(root: Path | str) -> ScanResult:
     """Scan a project folder. Broken files become warnings, never a crash.
 
     Raises ScanError only when the folder itself cannot be used.
     """
+    return scan_details(root).result
+
+
+def scan_details(root: Path | str) -> ScanDetails:
+    """Like scan_project, but also return the facts preflight needs."""
     folder = Path(root)
     if not folder.is_dir():
         raise ScanError(
             f"Cannot scan {folder}: it is not an existing folder. Check the path and try again."
         )
+    return analyse_snapshot(load_snapshot(folder))
 
-    snapshot = load_snapshot(folder)
+
+def analyse_snapshot(snapshot: ProjectSnapshot) -> ScanDetails:
+    """Run every detector on files already in memory. Pure: no file I/O."""
     manifests = read_manifests(snapshot)
     docker = parse_dockerfile(snapshot.texts.get("Dockerfile", ""))
     stack = detect_stack(snapshot, manifests, docker)
@@ -95,7 +119,7 @@ def scan_project(root: Path | str) -> ScanResult:
     env = clean_env_names(_collect_env_names(snapshot, docker) if has_project else ())
     ports = clean_ports(_collect_ports(snapshot, manifests, docker) if has_project else ())
 
-    return ScanResult(
+    result = ScanResult(
         project=ProjectInfo(
             language=stack.language,
             framework=stack.framework,
@@ -108,4 +132,7 @@ def scan_project(root: Path | str) -> ScanResult:
         warnings=_merge_warnings(
             snapshot.warnings, manifests.warnings, stack.warnings, runtime.warnings, env.warnings
         ),
+    )
+    return ScanDetails(
+        result=result, snapshot=snapshot, manifests=manifests, docker=docker, runtime=runtime
     )

@@ -3,9 +3,8 @@
 from importlib.metadata import version as package_version
 from pathlib import Path
 
-from typer.testing import CliRunner
-
 from rich.console import Console
+from typer.testing import CliRunner
 
 from deploy_agent.cli.main import _print_report, app
 from deploy_agent.models import PreflightReport, Severity
@@ -37,10 +36,14 @@ def test_preflight_good_project_exits_zero() -> None:
         [
             "preflight",
             str(FIXTURES / "preflight_pass"),
-            "--runtime", "3.12",
-            "--port", "8000",
-            "--health-path", "/health",
-            "--env-name", "DATABASE_URL",
+            "--runtime",
+            "3.12",
+            "--port",
+            "8000",
+            "--health-path",
+            "/health",
+            "--env-name",
+            "DATABASE_URL",
         ],
     )
 
@@ -76,3 +79,63 @@ def test_report_prints_brackets_literally() -> None:
     output = console.export_text()
     assert "seen [bold]here[/bold]" in output
     assert "Fix: fix [red]it" in output
+
+
+def test_plan_ready_project_exits_zero() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "plan",
+            str(FIXTURES / "preflight_pass"),
+            "--port",
+            "8000",
+            "--health-path",
+            "/health",
+            "--env-name",
+            "DATABASE_URL",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "READY FOR REVIEW" in result.output
+    assert "Nothing has been run" in result.output
+
+
+def test_plan_blocked_project_exits_one() -> None:
+    result = runner.invoke(app, ["plan", str(FIXTURES / "preflight_fail")])
+
+    assert result.exit_code == 1
+    assert "BLOCKED" in result.output
+    assert "dockerfile_no_baked_secrets" in result.output
+
+
+def test_plan_production_adds_promote_step() -> None:
+    result = runner.invoke(
+        app, ["plan", str(FIXTURES / "python_app"), "--environment", "production"]
+    )
+
+    assert result.exit_code == 0
+    assert "placeholder (production)" in result.output
+    assert "Promote" in result.output
+
+
+def test_plan_bad_environment_exits_two() -> None:
+    result = runner.invoke(app, ["plan", str(FIXTURES / "python_app"), "--environment", "prod"])
+
+    assert result.exit_code == 2
+
+
+def test_plan_bad_option_names_option_not_value() -> None:
+    pasted = "DATABASE_URL=postgres://u:fake-pw-9191@db/app"
+
+    result = runner.invoke(app, ["plan", str(FIXTURES / "python_app"), "--env-name", pasted])
+
+    assert result.exit_code == 2
+    assert "--env-name" in result.output
+    assert "fake-pw-9191" not in result.output
+
+
+def test_plan_missing_folder_exits_two(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["plan", str(tmp_path / "nope")])
+
+    assert result.exit_code == 2

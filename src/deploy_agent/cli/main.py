@@ -9,8 +9,17 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.text import Text
 
-from deploy_agent.models import DeploymentTarget, PreflightReport, PreflightResult, Severity
-from deploy_agent.preflight import build_context, run_preflight
+from deploy_agent.models import (
+    DeploymentTarget,
+    Environment,
+    PlanStatus,
+    PlanTarget,
+    PreflightReport,
+    PreflightResult,
+    Severity,
+)
+from deploy_agent.planner import build_plan, render_plan
+from deploy_agent.preflight import PreflightContext, build_context, run_preflight
 from deploy_agent.scanner import ScanError
 
 app = typer.Typer(help="Scan a project, plan a deployment, and explain failures.")
@@ -66,30 +75,33 @@ def _print_report(console: Console, report: PreflightReport) -> None:
     console.print(Text(f"\n{len(labels)} checks: {summary}"), soft_wrap=True)
 
 
-@app.command()
-def preflight(
-    path: Annotated[Path, typer.Argument(help="Project folder to check.")] = Path("."),
-    runtime: Annotated[
-        str | None, typer.Option("--runtime", help="Runtime version the target uses, e.g. 3.12.")
-    ] = None,
-    port: Annotated[
-        int | None, typer.Option("--port", help="Port the target sends traffic to.")
-    ] = None,
-    health_path: Annotated[
-        str | None, typer.Option("--health-path", help="Health-check path, e.g. /health.")
-    ] = None,
-    env_names: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--env-name",
-            help="A variable NAME the target provides. Repeat for each. Never pass values.",
-        ),
-    ] = None,
-) -> None:
-    """Run rule-based checks before a deploy. Read-only: nothing is changed or deployed."""
-    console = Console()
+PathArg = Annotated[Path, typer.Argument(help="Project folder to check.")]
+RuntimeOpt = Annotated[
+    str | None, typer.Option("--runtime", help="Runtime version the target uses, e.g. 3.12.")
+]
+PortOpt = Annotated[int | None, typer.Option("--port", help="Port the target sends traffic to.")]
+HealthPathOpt = Annotated[
+    str | None, typer.Option("--health-path", help="Health-check path, e.g. /health.")
+]
+EnvNamesOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--env-name",
+        help="A variable NAME the target provides. Repeat for each. Never pass values.",
+    ),
+]
+
+
+def _parse_target(
+    console: Console,
+    runtime: str | None,
+    port: int | None,
+    health_path: str | None,
+    env_names: list[str] | None,
+) -> DeploymentTarget:
+    """Build the target from CLI options, or explain the bad option and exit with code 2."""
     try:
-        target = DeploymentTarget(
+        return DeploymentTarget(
             runtime_version=runtime,
             port=port,
             health_check_path=health_path,
@@ -109,12 +121,55 @@ def preflight(
         )
         raise typer.Exit(code=2) from None
 
+
+def _load_context(console: Console, path: Path, target: DeploymentTarget) -> PreflightContext:
+    """Scan the project folder, or explain why it cannot be used and exit with code 2."""
     try:
-        context = build_context(path, target)
+        return build_context(path, target)
     except ScanError as error:
         console.print(Text(str(error)), soft_wrap=True)
         raise typer.Exit(code=2) from None
 
-    report = run_preflight(context)
+
+@app.command()
+def preflight(
+    path: PathArg = Path("."),
+    runtime: RuntimeOpt = None,
+    port: PortOpt = None,
+    health_path: HealthPathOpt = None,
+    env_names: EnvNamesOpt = None,
+) -> None:
+    """Run rule-based checks before a deploy. Read-only: nothing is changed or deployed."""
+    console = Console()
+    target = _parse_target(console, runtime, port, health_path, env_names)
+    report = run_preflight(_load_context(console, path, target))
     _print_report(console, report)
     raise typer.Exit(code=1 if report.has_errors else 0)
+
+
+@app.command()
+def plan(
+    path: PathArg = Path("."),
+    environment: Annotated[
+        Environment,
+        typer.Option("--environment", help="Where the release should end up."),
+    ] = Environment.STAGING,
+    runtime: RuntimeOpt = None,
+    port: PortOpt = None,
+    health_path: HealthPathOpt = None,
+    env_names: EnvNamesOpt = None,
+) -> None:
+    """Show a deployment plan for review. Nothing is run, changed or deployed.
+
+    The target is a placeholder until real providers are added.
+    """
+    console = Console()
+    requirements = _parse_target(console, runtime, port, health_path, env_names)
+    context = _load_context(console, path, requirements)
+    deployment_plan = build_plan(
+        context.project,
+        run_preflight(context),
+        PlanTarget(environment=Environment(environment), requirements=requirements),
+    )
+    console.print(render_plan(deployment_plan), soft_wrap=False)
+    raise typer.Exit(code=1 if deployment_plan.status is PlanStatus.BLOCKED else 0)

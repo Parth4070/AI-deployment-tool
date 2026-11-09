@@ -36,6 +36,8 @@ ACTION_CATALOG: Mapping[str, SafetyTier] = MappingProxyType(
         "read_logs": SafetyTier.AUTO,
         "retry_network_timeout": SafetyTier.AUTO,
         "clear_build_cache": SafetyTier.AUTO,
+        "build_artifact": SafetyTier.AUTO,  # local build only; nothing on the target changes
+        "verify_health": SafetyTier.AUTO,  # read-only request to the health-check path
         # Needs approval: show the exact change and how to undo it, then wait for yes.
         "edit_repo_file": SafetyTier.NEEDS_APPROVAL,
         "change_runtime_version": SafetyTier.NEEDS_APPROVAL,
@@ -45,6 +47,8 @@ ACTION_CATALOG: Mapping[str, SafetyTier] = MappingProxyType(
         "change_dns_record": SafetyTier.NEEDS_APPROVAL,
         "run_migrations": SafetyTier.NEEDS_APPROVAL,
         "promote_to_production": SafetyTier.NEEDS_APPROVAL,
+        "set_target_env_names": SafetyTier.NEEDS_APPROVAL,  # changes target config
+        "deploy_release": SafetyTier.NEEDS_APPROVAL,  # changes what is running
         # Manual only: explain and give steps, never execute.
         "restore_database": SafetyTier.MANUAL,
         "open_port_to_internet": SafetyTier.MANUAL,

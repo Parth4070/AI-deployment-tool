@@ -13,6 +13,10 @@ from deploy_agent.models import (
     Confidence,
     DeploymentPlan,
     Diagnosis,
+    PlanStatus,
+    PlanStep,
+    PlanTarget,
+    PolicyReason,
     PreflightResult,
     ProjectInfo,
     SafetyTier,
@@ -59,6 +63,26 @@ def action_kwargs(**overrides: Any) -> dict[str, Any]:
     return values | overrides
 
 
+def step_kwargs(**overrides: Any) -> dict[str, Any]:
+    values: dict[str, Any] = action_kwargs() | {
+        "number": 1,
+        "kind": "edit_repo_file",
+        "changes": "Adds one route to the app",
+        "policy_reason": PolicyReason.CATALOG_RULE,
+    }
+    return values | overrides
+
+
+def plan_kwargs(**overrides: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "target": PlanTarget(),
+        "project": ProjectInfo(**project_kwargs()),
+        "status": PlanStatus.READY_FOR_REVIEW,
+        "steps": (PlanStep(**step_kwargs()),),
+    }
+    return values | overrides
+
+
 def diagnosis_kwargs(**overrides: Any) -> dict[str, Any]:
     values: dict[str, Any] = {
         "cause": "The app listens on the wrong port",
@@ -78,7 +102,8 @@ class TestStrictRulesApplyToEveryModel:
             (ProjectInfo, project_kwargs()),
             (PreflightResult, failed_check_kwargs()),
             (Action, action_kwargs()),
-            (DeploymentPlan, {"steps": (Action(**action_kwargs()),)}),
+            (DeploymentPlan, plan_kwargs()),
+            (PlanStep, step_kwargs()),
             (Diagnosis, diagnosis_kwargs()),
         ],
     )
@@ -297,34 +322,58 @@ class TestAction:
 
 class TestDeploymentPlan:
     def test_steps_keep_their_order(self) -> None:
-        first = Action(**action_kwargs(what="Build the image"))
-        second = Action(**action_kwargs(what="Run migrations"))
-        third = Action(**action_kwargs(what="Promote to production"))
+        names = ["Build the image", "Run migrations", "Promote to production"]
+        steps = tuple(
+            PlanStep(**step_kwargs(number=index, what=name))
+            for index, name in enumerate(names, start=1)
+        )
 
-        plan = DeploymentPlan(steps=(first, second, third))
+        plan = DeploymentPlan(**plan_kwargs(steps=steps))
 
-        assert [step.what for step in plan.steps] == [
-            "Build the image",
-            "Run migrations",
-            "Promote to production",
-        ]
+        assert [step.what for step in plan.steps] == names
 
     def test_plan_with_no_steps_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            DeploymentPlan(steps=())
+            DeploymentPlan(**plan_kwargs(steps=()))
 
-    def test_invalid_step_in_json_is_rejected(self) -> None:
-        reversible_without_undo = '{"what": "Do it", "tier": "auto", "reversible": true}'
+    def test_steps_out_of_order_are_rejected(self) -> None:
+        steps = (PlanStep(**step_kwargs(number=2)), PlanStep(**step_kwargs(number=1)))
 
         with pytest.raises(ValidationError):
-            DeploymentPlan.model_validate_json(f'{{"steps": [{reversible_without_undo}]}}')
+            DeploymentPlan(**plan_kwargs(steps=steps))
+
+    def test_plain_action_is_not_a_plan_step(self) -> None:
+        with pytest.raises(ValidationError):
+            DeploymentPlan(**plan_kwargs(steps=(Action(**action_kwargs()),)))
+
+    def test_reversible_step_without_undo_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            PlanStep(**step_kwargs(undo_instructions=None))
+
+    def test_blocked_needs_blockers_and_blockers_need_blocked(self) -> None:
+        blocker = PreflightResult(**failed_check_kwargs())
+
+        with pytest.raises(ValidationError):
+            DeploymentPlan(**plan_kwargs(status=PlanStatus.BLOCKED))
+        with pytest.raises(ValidationError):
+            DeploymentPlan(**plan_kwargs(blockers=(blocker,)))
+        plan = DeploymentPlan(**plan_kwargs(status=PlanStatus.BLOCKED, blockers=(blocker,)))
+        assert plan.blockers == (blocker,)
+
+    def test_warning_cannot_be_a_blocker(self) -> None:
+        warning = PreflightResult(**failed_check_kwargs(severity=Severity.WARNING))
+
+        with pytest.raises(ValidationError):
+            DeploymentPlan(**plan_kwargs(status=PlanStatus.BLOCKED, blockers=(warning,)))
 
     def test_forbidden_step_is_kept_for_the_policy_engine_to_see(self) -> None:
-        step = Action(
-            **action_kwargs(tier=SafetyTier.FORBIDDEN, reversible=False, undo_instructions=None)
+        step = PlanStep(
+            **step_kwargs(tier=SafetyTier.FORBIDDEN, reversible=False, undo_instructions=None)
         )
 
-        assert DeploymentPlan(steps=(step,)).steps[0].tier is SafetyTier.FORBIDDEN
+        plan = DeploymentPlan(**plan_kwargs(steps=(step,)))
+
+        assert plan.steps[0].tier is SafetyTier.FORBIDDEN
 
 
 class TestDiagnosis:

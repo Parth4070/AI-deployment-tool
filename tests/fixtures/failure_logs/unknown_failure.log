@@ -1,0 +1,6 @@
+Starting worker...
+Traceback (most recent call last):
+  File "/app/app/jobs.py", line 12, in run
+    user = cache["USER_ID"]
+KeyError: 'USER_ID'
+Segmentation fault (core dumped)

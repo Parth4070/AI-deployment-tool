@@ -1,0 +1,14 @@
+node:internal/modules/cjs/loader:1080
+  throw err;
+  ^
+
+Error: Cannot find module './routes'
+Require stack:
+- /app/server.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1077:15)
+    at Object.<anonymous> (/app/server.js:2:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/app/server.js' ]
+}
+
+Node.js v18.19.0

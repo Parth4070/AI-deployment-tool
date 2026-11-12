@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/app/app/main.py", line 5, in <module>
+    DATABASE_URL = os.environ["DATABASE_URL"]
+                   ~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "<frozen os>", line 714, in __getitem__
+KeyError: 'DATABASE_URL'

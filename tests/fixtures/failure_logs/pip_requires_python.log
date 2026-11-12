@@ -1,0 +1,2 @@
+Processing ./wheels/django-5.0-py3-none-any.whl
+ERROR: Package 'django' requires a different Python: 3.9.18 not in '>=3.10'

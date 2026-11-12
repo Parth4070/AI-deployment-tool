@@ -1,0 +1,11 @@
+node:internal/errors:496
+    ErrorCaptureStackTrace(err);
+    ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@prisma/client' imported from /app/server.mjs
+    at new NodeError (node:internal/errors:405:5)
+    at packageResolve (node:internal/modules/esm/resolve:916:9) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v18.19.0

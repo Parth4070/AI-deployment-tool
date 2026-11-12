@@ -2,7 +2,7 @@
 
 from deploy_agent.models.action import Action
 from deploy_agent.models.common import Confidence, SafetyTier, Severity
-from deploy_agent.models.diagnosis import Diagnosis
+from deploy_agent.models.diagnosis import Diagnosis, FailureMatch, NoMatch
 from deploy_agent.models.plan import (
     DeploymentPlan,
     Environment,
@@ -21,6 +21,8 @@ __all__ = [
     "DeploymentTarget",
     "Diagnosis",
     "Environment",
+    "FailureMatch",
+    "NoMatch",
     "PlanStatus",
     "PlanStep",
     "PlanTarget",

@@ -1,0 +1,6 @@
+#8 [build 4/6] RUN npm ci
+#8 1.204 npm ERR! code EBADENGINE
+#8 1.205 npm ERR! engine Unsupported engine
+#8 1.205 npm ERR! engine Not compatible with your version of node/npm: my-app@1.0.0
+#8 1.206 npm ERR! notsup Required: {"node":">=20"}
+#8 1.206 npm ERR! notsup Actual:   {"npm":"9.8.1","node":"v18.19.0"}
